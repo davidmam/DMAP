@@ -39,6 +39,7 @@ sub new {
 	      orient=>0, # 0 for forwards 1 for reverse
 	      name=>"",
 	      offset=>0, #if this is a fragment of the molecule, the start coordinate of the fragment
+	      fragment=>0,	
 	      length=>0
     };
 
@@ -47,6 +48,9 @@ sub new {
     }
     if ($par->{offset}){
     	$self->{offset}=$par->{offset};
+    }
+    if ($par->{fragment}){
+    	$self->{fragment}=$par->{fragment};
     }
     if ($par->{length}){
 		$self->{length}=$par->{length};
@@ -78,14 +82,30 @@ sub addMarker {
 	warn("incomplete marker specification - not added\n");
     }
     if (! exists($self->{markers}{$name})){
-	$self->{markers}{$name}= {name=>$name, type=>$type, molpos=>$molpos, mappos=>{}};
+		$self->{markers}{$name}= {name=>$name, type=>$type, molpos=>$molpos, mappos=>{}};
     }
     if ($mappos){
-	unless($mapname){
-	    $mapname="default";
-	}
+		unless($mapname){
+	  	  $mapname="default";
+		}
 	$self->addMapPos($mapname, $name, $mappos);
     }
+}
+
+=head2 hasMarker()
+
+boolean checks that a marker exists in the molecule
+
+C<< $mol->hasMarker($markername); >>
+
+=cut
+sub hasMarker{
+	my ($self, $name)=@_;
+	if (exists($self->{markers}{$name})){
+		return 1;
+	}else{
+		return 0;
+	}
 }
 
 
@@ -100,11 +120,11 @@ C<< $mol->addMapPos($mapname, $markername, $mappos); >>
 sub addMapPos {
     my ($self, $mapname, $markername, $mappos)=@_;
     if ($mapname && $markername && $mappos ) {
-	if (exists($self->{markers}{$markername})){
-	    $self->{markers}{$markername}{mappos}{$mapname}=$mappos;			
-	} else {
-	    warn "No such marker $markername in this molecule\n";
-	}
+		if (exists($self->{markers}{$markername})){
+		    $self->{markers}{$markername}{mappos}{$mapname}=$mappos;			
+		} else {
+		    warn "No such marker $markername in this molecule\n";
+		}
     }
 }
 
@@ -163,6 +183,23 @@ C<< $mol->unflip(); >>
 sub unflip {
     my ($self)=@_;
     $self->{orient}=0;
+}
+
+=head2 fragment()
+ Can be used to set or get the fragment number
+ 
+ <C $fragno=$mol->fragment(); >>
+ 
+ <C $mol->fragment($fragno); >>
+ 
+=cut
+
+sub fragment {
+	my ($self, $frag)=@_;
+	if (defined($frag)){
+		$self->{fragment}=$frag;
+	}
+	return $self->{fragment};
 }
 
 =head2 isflipped()

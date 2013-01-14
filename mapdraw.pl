@@ -2,6 +2,7 @@
 
 use PDF::API2;
 use PDF::Table;
+use Math::Trig;
 use lib ".";
 use DMAP::Assembly;
 use strict;
@@ -173,9 +174,16 @@ if ($gfffile && -e $gfffile) {
 		chomp $gff;
 		my @F=split /\t/, $gff;
 		my %ext=();
-		foreach my $n (split (/; */ , $F[8])){
-			my ($key, $value)= split( /=/,$n);
-			$ext{$key}=$value;
+		unless ($F[8]){
+			$F[8]=$F[7];
+		}
+		if ($F[8]){
+			foreach my $n (split (/; */ , $F[8])){
+				my ($key, $value)= split( /=/,$n);
+				$ext{$key}=$value;
+			}
+		}else{
+			warn "Error with GFF line: $gff\n";
 		}
 		my %notes=();
 		if (exists($ext{"Note"})){
@@ -230,7 +238,7 @@ if ($mapfound && $agpfound && $gfffound){
     foreach my $m ($assembly->getAllMolecules()) {
 	#if (exists($m->{molecule}->{markers}{$m->{name}}{mappos}{$mapname})){
 	    push @molecules, {name=>$m->{name}, start=>$m->{start}, length=>$m->{molecule}->{length} };
-	    print STDERR "name=>".$m->{name}.", start=>".$m->{start}.", length ".$m->{molecule}->{length}."\n";
+	    #print STDERR "name=>".$m->{name}.", start=>".$m->{start}.", length ".$m->{molecule}->{length}."\n";
 	#} else {
 	 #   warn "Marker ".$m->{name}." not in map $mapname\n";
 	#}
@@ -603,7 +611,7 @@ foreach my $mark (@markers) {
 
     push @{$seqbins[$b]{$mark->{type}}}, $mark;
     ${$seqbins[$b]{$mark->{type}}}[0]->{count}++;
-    print STDERR "Mark bin $b type $mark->{type} count $mark->{count} bincount ".${$seqbins[$b]{$mark->{type}}}[0]->{count}."\n";
+    #print STDERR "Mark bin $b type $mark->{type} count $mark->{count} bincount ".${$seqbins[$b]{$mark->{type}}}[0]->{count}."\n";
 }	
 #we can now take just the first marker of each type from the bin.
 
@@ -637,7 +645,7 @@ foreach my $m (sort {$a->{avemappos} <=> $b->{avemappos}?$a->{avemappos} <=> $b-
     }else{
 	$m->{mapbin}=int($markerbins*binmappos($m->{avemappos})/$maxchrpos);
     }
-    print STDERR "MAP bin ".join(" : ",$m->{mapbin},$markerbins, $m->{avemappos},$maxchrpos, $m->{name}  )."\n";
+    #print STDERR "MAP bin ".join(" : ",$m->{mapbin},$markerbins, $m->{avemappos},$maxchrpos, $m->{name}  )."\n";
     if ($m->{mapbin} <0){
 	if ($plotallmap){
 	    push @{$mapbins[0]{"m_".$m->{avemappos}}}, $m;
@@ -881,7 +889,7 @@ $pdf->finishobjects($titletxt);
 
 # need to pull back all markers in rearranged molecule and plot
 my @repmarkers=sort {int($a->{molpos} <=>$b->{molpos})} $assembly->getMarkers($mapname);
-
+print STDERR "Retrieved ".(scalar @repmarkers)." markers\n";
 foreach my $m (@repmarkers){
     my $elinkob=$dpage->gfx;
     $elinkob->strokecolor($links{$m->{type}}{colour});
@@ -896,13 +904,16 @@ my $oldline=$dpage->gfx;
 $oldline->strokecolor('red');
 my $sp=$repmarkers[0]->{molpos};
 my $ep=$repmarkers[$#repmarkers]->{molpos};
+#print STDERR "plotting original curve between $sp and $ep\n";
 my $step=int(($ep-$sp)/200);# ca. 200 steps to draw the line.
 my $lastx=0;
 my $lastyold=0;
+#print "parameters are $report->{assembly}{final}{a0} $report->{assembly}{final}{a1} $report->{assembly}{final}{a2} $report->{assembly}{final}{a3}\n";
 for (my $pos=$sp; $pos<$ep; $pos += $step){
     my $xc=$cplotyaxis+$cplotsize*$pos/$maxmolpos;
     my $yo=gety($pos, $report,0);
     my $yco=$cplotxaxis+$cplotsize*($yo-$minchrpos)/$cplotyscale;
+    #print "plotting coordinates $xc, $yco\n";
     if ($lastx){
 	$oldline->move($lastx/mm,$lastyold/mm);
 	$oldline->line($xc/mm,$yco/mm);
@@ -962,6 +973,7 @@ $pdf->finishobjects($rtext);
 
 $curry -= 5/mm;
 #add headers to table
+print STDERR "FIT table\n";
 push @tabledata,['', "Mean Square Error", "Mean Error", qw/a b c d/];
 #print STDERR "$report\n";
 push @tabledata,["Initial Fit", sprintf("%5.3e", $report->{assembly}{original}{chi2} ), sprintf("%5.3e", $report->{assembly}{original}{var}), sprintf("%5.3e", $report->{assembly}{original}{a0}), sprintf("%5.3e", $report->{assembly}{original}{a1}), sprintf("%5.3e", $report->{assembly}{original}{a2}), sprintf("%5.3e", $report->{assembly}{original}{a3})];
@@ -997,7 +1009,7 @@ if ($curry <75/mm){
 }
  # %{$report{assembly}{original}}=$self->fit();
  #   %{$report{assembly}{final}}=$self->bestfit();
-
+print STDERR "Scaffold table\n";
 @tabledata=(["Scaffold", "Start", "Length", "Markers", "Strand", "Mean Square Error", "Mean Error"] );
 @cellprops=([{},{},{},{},{},{},{}]);
 foreach my $m (sort {$a->{start} <=> $b->{start}} @{$report->{molecules}}){
@@ -1068,7 +1080,7 @@ my @shortcell=@cellprops[0..1];
 					     start_y=> $curry, 
 					     next_y=>($height-2*$margin)/mm,
 					     start_h=> $curry-$margin/mm, 
-					     next_h=>($height-2*$margin)/mm,
+					     next_h=>($height-3*$margin)/mm,
 					     padding=>5, 
 					     font=> $font{Helvetics}{Bold},
 					     font_size      => 8,
@@ -1086,11 +1098,27 @@ my %molrank =();
 my %avemap=();
 my $rank=0;
 foreach my $m (sort {$a->{start} <=>$b->{start}} @molecules){
-    my %mol=$assembly->getMolecule($m->{name});
+	if (0){
+    	warn "Molecule listed:\n";
+    	foreach  my $k (keys %$m){
+    		warn "$k: $m->{$k}\n";
+    	}
+    			
+    }
+    
+	
+    my %mol=$assembly->getMolecule($m->{name}, $m->{fragment});
+    if (0){
+    	warn "Molecule returned:\n";
+    	foreach  my $k (keys %mol){
+    		warn "$k: $mol{$k}\n";
+    	}
+    			
+    }
     if ((scalar $mol{molecule}->getMarkers($mapname))>0){
 	$rank++;
-	$molrank{$m->{name}}=$rank;
-	$avemap{$m->{name}}=$mol{molecule}->aveMapPos($mapname);
+	$molrank{join("_",$m->{name}, $m->{fragment})}=$rank;
+	$avemap{join("_",$m->{name}, $m->{fragment})}=$mol{molecule}->aveMapPos($mapname);
     }
 }
 my %maprank=();
@@ -1100,22 +1128,35 @@ foreach my $m (sort { $avemap{$a} <=> $avemap{$b} } keys %molrank){
     $maprank{$m}=$rank;
 }
 
+print STDERR "RANK table\n";
+
 my @ranktable=(["Molecule", "Assembly order", "Map order", "Difference"]);
 
 foreach my $m (sort { $molrank{$a} <=> $molrank{$b} } keys %molrank){
     my $diff=$maprank{$m}-$molrank{$m};
     my $difftext="$diff";
     if ($diff==0){ $difftext="-";}
+
     push @ranktable, [$m,$molrank{$m}, $maprank{$m}, $difftext];
+}
+if (1){
+	foreach my $r (@ranktable){
+		print STDERR join(":","MAPRANK", @$r)."\n";
+	}
+}
+
+if ($curry <75/mm){
+    $rpage=$pdf->page;
+    $curry=($height-$margin)/mm;
 }
 
 ($rpage,$pagecount, $curry)=$pdftable->table($pdf, $rpage,\@ranktable, 
 					     x=>$margin/mm,
 					     w=>($width-(2*$margin))/mm, 
-					     start_y=> $curry, 
+					     start_y=> $curry-($margin/mm), 
 					     next_y=>($height-2*$margin)/mm,
 					     start_h=> $curry-$margin/mm, 
-					     next_h=>($height-2*$margin)/mm,
+					     next_h=>($height-3*$margin)/mm,
 					     padding=>5, 
 					     font=> $font{Helvetica}{Bold},
 					     font_size      => 10,
@@ -1140,13 +1181,14 @@ foreach my $m (@markers){
     $markererror{$m->{name}}={error=>abs($y-$m->{avemappos}), molpos=>$m->{molpos}, calcmappos=>$y, givenmappos=>$m->{avemappos}};
 }
 
+print STDERR "MARKER table\n";
 my @errortable=(["Marker", "sequence position", "map position", "calculated fit", "error"]);
 
 foreach my $m (sort {int($markererror{$b}{error} <=>$markererror{$a}{error})} keys %markererror){
     push @errortable, [ $m, $markererror{$m}{molpos}."bp", $markererror{$m}{givenmappos}, sprintf("%5.3f",$markererror{$m}{calcmappos}),sprintf("%5.3f", $markererror{$m}{error})];
-    print STDERR join(":",$m, $markererror{$m}{molpos}."bp", $markererror{$m}{givenmappos}, sprintf("%5.3f", $markererror{$m}{calcmappos}), sprintf("%5.3f",$markererror{$m}{error})),"\n";
+#    print STDERR join(":",$m, $markererror{$m}{molpos}."bp", $markererror{$m}{givenmappos}, sprintf("%5.3f", $markererror{$m}{calcmappos}), sprintf("%5.3f",$markererror{$m}{error})),"\n";
 }
-print STDERR (scalar @errortable),"\n"; 
+#print STDERR (scalar @errortable),"\n"; 
 
 my @plotlist=();
 my $plotlen=50;
@@ -1155,7 +1197,7 @@ if (scalar @errortable <$plotlen){
 }
 foreach my $e (@errortable[0..$plotlen]){
     if ($e){
-	print STDERR join("::", @$e),"\n";
+#	print STDERR join("::", @$e),"\n";
 	push @plotlist, $e;
     } 
 
@@ -1182,7 +1224,7 @@ if ($plotlist[0]){
 
 sub plotmarker {
     my ($l, $plotbin,$column)=@_;
-    print STDERR "plotting marker $l in $plotbin column $column\n";
+ #   print STDERR "plotting marker $l in $plotbin column $column\n";
     my $linkob=$page->gfx;
     $linkob->strokecolor($links{$l->{type}}{colour});
     my $linktxt=$page->text;
@@ -1300,7 +1342,9 @@ $pdf->save;#as($filename);
 sub gety {
     my ($pos, $report, $new)=@_;
     my $fit=$new?"final":"original";
-    my $y=$report->{assembly}{$fit}{a0} + $pos * $report->{assembly}{$fit}{a1} + $pos * $pos * $report->{assembly}{$fit}{a2} + $pos *$pos * $pos * $report->{assembly}{$fit}{a3} ;
+    #my $y=$report->{assembly}{$fit}{a0} + $pos * $report->{assembly}{$fit}{a1} + $pos * $pos * $report->{assembly}{$fit}{a2} + $pos *$pos * $pos * $report->{assembly}{$fit}{a3} ;
+    my $y=$report->{assembly}{$fit}{a0} + $report->{assembly}{$fit}{a1} * sinh( ($pos - $report->{assembly}{$fit}{a2}*$report->{assembly}{$fit}{size})*$report->{assembly}{$fit}{a3}/$report->{assembly}{$fit}{size});
+#    print STDERR "getting calculated molpos for $pos : $y\n";
     return $y;
 }
 
