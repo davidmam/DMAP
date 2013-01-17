@@ -22,6 +22,7 @@ options:
  -outfile output file
  -height figure height in mm
  -width figure width in mm
+-linewidth width of drawn lines in points
  -colour (multi) name:red,green,blue values 0-255
  -chrom chromosome colour
  -mol molecule colour
@@ -67,6 +68,7 @@ my $chrheight=90; # percent of page height for a chromosome.
 my $molfontsize=10;
 my $markerfontsize=6;
 my $minfont=4;
+my $linewidth=0.5;
 my $invert=0; # whether to have 0 at the bottom or top(default)
 my $lineanglespace=4;
 my $markerlabelwidth=32;
@@ -112,6 +114,7 @@ GetOptions(
     "genbin=s"=>\$genbin,
     "minfont=i"=>\$minfont,
     "nocount"=>\$nocount,
+    "linewidth=f"=>\$linewidth,
     "mol=s"=>\$molcolour
     );
 
@@ -358,6 +361,13 @@ plotfig($dpage);
 sub plotfig { #plots the figure outline on the given page.
     my ($cpage)=@_;
     my $cplot=$cpage->gfx;
+    if ($linewidth){
+	my $lw=$cplot->linewidth($linewidth);
+    
+	foreach my $k (keys %$lw){ 
+	    print STDERR "LINEWIDTH: $k $lw->{$k}\n";
+	}
+    }
     my $ctext=$cpage->text;
     $ctext->font($titletextfont,$titlefontsize/pt);
     $ctext->fillcolor($caxiscolour);
@@ -414,6 +424,9 @@ sub plotfig { #plots the figure outline on the given page.
 # draw chromosome
 
 my $chrob=$page->gfx;
+if ($linewidth){
+    $chrob->linewidth($linewidth);
+}
 $chrob->fillcolor($chrcolour);
 $chrob->strokecolor($chrcolour);
 
@@ -470,6 +483,9 @@ foreach my $m (sort {$a->{start} <=> $b->{start} } @molecules){
     push @{$mollabelbins[int($molbins* ($m->{start}+($m->{length}/2))/$maxmolpos)]}, $m;
     $mc++;
     my $molob=$page->gfx;
+    if ($linewidth){
+	$molob->linewidth($linewidth);
+    }
     $molob->strokecolor($molcolour);
 #    print STDERR join(":", $m),"\n";
     my $endy=($m->{length}/$maxmolpos)*$maxheight;
