@@ -231,14 +231,18 @@ sub addGFFMarker {
 sub addMapPos {
 	#TODO need to check references here #DONE
 	my ($self, $map, $marker,$pos)=@_;
+	my $success=0;
 	if (exists($self->{markers}{$marker}) && 
 		exists($self->{molecules}{$self->{markers}{$marker}})){
 			foreach my $m (@{$self->{molecules}{$self->{markers}{$marker}}}){
 				if ($m->{molecule}->hasMarker($marker)){
 					$m->{molecule}->addMapPos($map, $marker, $pos);
+					$success++;
+					
 				}
 			}
 	}
+	return $success;
 }
 
 =head2 getMarkers

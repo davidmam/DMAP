@@ -83,11 +83,14 @@ my $molposbin=0;
 my $plottitle="Chromosome Map";
 my $genbin="0.1";
 my $nocount=0;
+my $debug=0;
 my $correlate=""; # draw a correlation between the genetic and physical maps to the given file.
 my $agpfile=""; # AGP file containing molecule definition.
 my $gfffile=""; #GFF file containing marker positions on the molecules.
 my $mapfile=""; #file containing marker positions on the molecules. Format "markername position .*"
 my $mapname=""; #name of map (for versioning etc.)
+my $chrtrim=0; # trim chromosome to map limits
+my $plotunanchored=0; # plot unanchored linkage markers.
 
 GetOptions(
     "infile=s"=>\$infile,
@@ -115,7 +118,9 @@ GetOptions(
     "minfont=i"=>\$minfont,
     "nocount"=>\$nocount,
     "linewidth=f"=>\$linewidth,
-    "mol=s"=>\$molcolour
+    "mol=s"=>\$molcolour,
+    "unanchored"=>\$plotunanchored,
+    "trim"=>\$chrtrim
     );
 
 my $mapdp=0;
@@ -142,6 +147,7 @@ my $assembly=DMAP::Assembly->new({name=>$plottitle});
 my $mapfound=0;
 my $agpfound=0;
 my $gfffound=0;
+my @unanchored=(); # holds unanchored genetic markers.
 
 if ($agpfile && -e $agpfile) {
 	open AGPFILE, "$agpfile" or die "Could not open AGP file: $!\n";
@@ -204,7 +210,7 @@ if ($gfffile && -e $gfffile) {
 #		$assembly->addGFFMarker($F[0], $ext{ID},$notes{pos}, $F[3],$notes{type}, $mmap);
 		$assembly->addGFFMarker($F[0], $ext{ID}, $F[3],$notes{type});
 
-		if (exists($notes{pos})){
+		if (exists($notes{pos}) && ! $mapfile ){
 		    $assembly->addMapPos($mmap,$ext{ID}, $notes{pos});
 		}
 #		 $markername, $geneticmapposition, $physicalpositioninmolecule, $type);		
@@ -223,10 +229,17 @@ if ($mapfile && -e $mapfile) {
 	next unless $mapline=~m/;/;
 	#split lines and add to assembly
 	my ($markername, $markerpos, $junk)= split /\s+/, $mapline, 3;
-	$assembly->addMapPos($gmap, $markername, $markerpos);
-	if ($markerpos > $maxchrpos){$maxchrpos=$markerpos;}
-	if ($markerpos < $minchrpos){$minchrpos=$markerpos;}
-	print STDERR "ADDING MAP POS $markername $markerpos $maxchrpos $minchrpos\n";
+	if ($assembly->addMapPos($gmap, $markername, $markerpos)){
+	    if ($markerpos > $maxchrpos){$maxchrpos=$markerpos;}
+	    if ($markerpos < $minchrpos){$minchrpos=$markerpos;}
+	    print STDERR "ADDING MAP POS $markername $markerpos $maxchrpos $minchrpos\n";
+	} else {
+	    if ($plotunanchored){
+		push @unanchored, {"name"=>$markername, "pos"=>$markerpos};
+		if ($markerpos > $maxchrpos){$maxchrpos=$markerpos;}
+		if ($markerpos < $minchrpos){$minchrpos=$markerpos;}
+	    }
+	}
 	
 	
     }
@@ -236,6 +249,8 @@ if ($mapfile && -e $mapfile) {
 
 if ($mapfound && $agpfound && $gfffound){  
     
+    print STDERR "MAXCHR: $maxchrpos\n";
+
 # need to build marker and molecule lists.
     #molecules
     foreach my $m ($assembly->getAllMolecules()) {
@@ -352,8 +367,12 @@ my $cplotsize=$width * 0.7;
 my $cplotyaxis=$width * 0.2;
 my $cplotxaxis=($height-$cplotsize)/2;
 my $cplotystart=0<$minchrpos?0:$minchrpos;
-my $cplotyscale=($maxchrpos>100?$maxchrpos:100)-$cplotystart;
 
+my $cplotyscale=($maxchrpos>100?$maxchrpos:100)-$cplotystart;
+if ($chrtrim){
+    $cplotystart=$minchrpos;
+    $cplotyscale=$maxchrpos-$cplotystart;
+}
 # plot the figure outline for the correlation and modelled plots.
 plotfig($cpage);
 plotfig($dpage);
@@ -364,9 +383,9 @@ sub plotfig { #plots the figure outline on the given page.
     if ($linewidth){
 	my $lw=$cplot->linewidth($linewidth);
     
-	foreach my $k (keys %$lw){ 
-	    print STDERR "LINEWIDTH: $k $lw->{$k}\n";
-	}
+	#foreach my $k (keys %$lw){ 
+	#    print STDERR "LINEWIDTH: $k $lw->{$k}\n";
+	#}
     }
     my $ctext=$cpage->text;
     $ctext->font($titletextfont,$titlefontsize/pt);
@@ -834,7 +853,10 @@ while ($currentbin < $markerbins){
 }
 
 
-## Plotting genetic map marekrs
+## Plotting genetic map markers
+# plot unanchored
+foreach my $m (@unanchored){plotunmap($m);}
+#plot anchored
 $currentbin=0;
 $lastoccbin1=-1;
 $lastoccbin2=-1;
@@ -851,6 +873,7 @@ while ($currentbin <= $markerbins){
 	while ($plotbin<=$lastoccbin1) {$plotbin++;}
 	
 	plotmap($keys[0], scalar @{$mapbins[$currentbin]{$keys[0]}}, $plotbin,0);
+
 	$lastoccbin1=$plotbin;
 	$currentbin++;
     }else {
@@ -1155,7 +1178,7 @@ foreach my $m (sort { $molrank{$a} <=> $molrank{$b} } keys %molrank){
 
     push @ranktable, [$m,$molrank{$m}, $maprank{$m}, $difftext];
 }
-if (1){
+if ($debug){
 	foreach my $r (@ranktable){
 		print STDERR join(":","MAPRANK", @$r)."\n";
 	}
@@ -1293,6 +1316,21 @@ sub plotmarker {
     $pdf->finishobjects($linkob, $linktxt);
 }
 
+sub plotunmap {
+    my %marker=%{$_[0]};
+    my $ypos=$basemargin +$maxheight -($maxheight*$marker{'pos'}/$maxchrpos);
+    if ($invert) {
+	$ypos=$basemargin + ($maxheight*$marker{'pos'}/$maxchrpos);
+    }
+    my $go=$page->gfx;
+    $go->strokecolor('gray');
+    my $labelx=($chrx);
+    $go->move($labelx/mm,$ypos/mm);
+    $labelx+=$chrwidth;
+    $go->line($labelx/mm,$ypos/mm);
+    $go->stroke;	
+    $pdf->finishobjects($go);
+}
 
  sub plotmap {
     my ($l,$count, $plotbin,$column)=@_;
