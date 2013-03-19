@@ -34,6 +34,8 @@ options:
  -nosize don't add molecule size to the plot title.
  -seqbin resolution of sequence marker bin (only one marker of each type will be shown per bin) Default 100.
  -title plot title. 
+ -unanchored Plot unanchored markers as grey bars on genetic map
+ -trim Trim genetic map to maximum map position (otherwise 100 or max pos if greater). If -unanchored is not set then it trims to anchored markers only. 
 
 Colours are X11/HTML/CSS colours.
 Font is Helvetica or Times with options Roman Bold or Italic e.g. Helvetica Roman
@@ -160,9 +162,11 @@ if ($agpfile && -e $agpfile) {
 			$mollen+=$F[5];
 		} else {
 			my $wc=$F[8]eq'-'?1:0;
-			$assembly->addMolecule($mollen+1,$F[7],$F[5],$wc,$F[6]-1);
+			my $fraglen=1+$F[7]-$F[6];
+
+			$assembly->addMolecule($mollen+1,$fraglen,$F[5],$wc,$F[6]-1);
 			print STDERR "adding molecule $F[7] $F[5]\n";
-			$mollen+=1+$F[7]-$F[6];
+			$mollen+=$fraglen;
 
 
 		}
