@@ -30,6 +30,7 @@ options:
  -crowd try to fit more marker labels in (default 2.5 - higher is more labels)
  -plotallmap plot every genetic map pos rather than binning.
  -nocount Don't include marker count.
+ -nolcount Don't count physically colocated labels.
  -genbin resolution of genetic map bin (default 0.1cM)
  -nosize don't add molecule size to the plot title.
  -seqbin resolution of sequence marker bin (only one marker of each type will be shown per bin) Default 100.
@@ -85,12 +86,13 @@ my $molposbin=0;
 my $plottitle="Chromosome Map";
 my $genbin="0.1";
 my $nocount=0;
+my $nolcount=0;
 my $debug=0;
 my $correlate=""; # draw a correlation between the genetic and physical maps to the given file.
 my $agpfile=""; # AGP file containing molecule definition.
 my $gfffile=""; #GFF file containing marker positions on the molecules.
 my $mapfile=""; #file containing marker positions on the molecules. Format "markername position .*"
-my $mapname=""; #name of map (for versioning etc.)
+my $mapname="default"; #name of map (for versioning etc.)
 my $chrtrim=0; # trim chromosome to map limits
 my $plotunanchored=0; # plot unanchored linkage markers.
 
@@ -119,10 +121,12 @@ GetOptions(
     "genbin=s"=>\$genbin,
     "minfont=i"=>\$minfont,
     "nocount"=>\$nocount,
+    "nolcount"=>\$nolcount,
     "linewidth=f"=>\$linewidth,
     "mol=s"=>\$molcolour,
     "unanchored"=>\$plotunanchored,
-    "trim"=>\$chrtrim
+    "trim"=>\$chrtrim,
+    "debug"=>\$debug
     );
 
 my $mapdp=0;
@@ -185,14 +189,17 @@ if ($gfffile && -e $gfffile) {
 	while (my $gff=<GFFFILE>){
 		next if $gff=~m/^!/;
 		chomp $gff;
-		my @F=split /\t/, $gff;
+		my @F=split / *\t */, $gff;
 		my %ext=();
 		unless ($F[8]){
 			$F[8]=$F[7];
 		}
 		if ($F[8]){
 			foreach my $n (split (/; */ , $F[8])){
-				my ($key, $value)= split( /=/,$n);
+				my ($key, $value)= split( / *= */,$n);
+				$key=~s/^ *//;
+				$value=~s/^ *//;
+				chomp $value;
 				$ext{$key}=$value;
 			}
 		}else{
@@ -203,14 +210,28 @@ if ($gfffile && -e $gfffile) {
 		    #set default $notes{pos}
 		    #$notes{pos}=-1;
 		    foreach my $n (split(/, /, $ext{'Note'})){
-			my ($key,$value)= split(/: /, $n);
+			my ($key,$value)= split(/: */, $n);
+			$key=~s/^ *//;
+			$value=~s/^ *//;
+			chomp $value;
 			$notes{$key}=$value;
 		    }
 		}
 		my $mmap=$gmap;
 		#if ($notes{pos}==-1){ $mmap="fake";}
-		next unless (exists($ext{ID}) #and exists($notes{pos}) 
-			     and exists($notes{type}));
+		if ($debug) {
+		    foreach my $e (keys %ext){
+			print STDERR ":$e:$ext{$e}:\n";
+		    }
+		    foreach my $n (keys %notes){
+			print STDERR ":$n:$notes{$n}:\n";
+		    }
+		}
+		unless (exists($ext{ID}) #and exists($notes{pos}) 
+			     and exists($notes{type})){
+		    print STDERR "badly specified GFF line - need ID and Note:type in $F[8]\n";
+		    next;
+		}
 #		$assembly->addGFFMarker($F[0], $ext{ID},$notes{pos}, $F[3],$notes{type}, $mmap);
 		$assembly->addGFFMarker($F[0], $ext{ID}, $F[3],$notes{type});
 
@@ -226,13 +247,14 @@ if ($gfffile && -e $gfffile) {
 if ($mapfile && -e $mapfile) {
 
     my $gmap=$mapname?$mapname:"default";
-    open (MAPFILE, "$mapfile") or die "Cannto open map file $mapfile: $!\n";
+    open (MAPFILE, "$mapfile") or die "Cannot open map file $mapfile: $!\n";
     while (my $mapline=<MAPFILE>){
 	next if $mapline=~m/^ *$/; #skip blank lines and comments.
 	next if $mapline=~m/^;/; #skip blank lines and comments.
 	next unless $mapline=~m/;/;
 	#split lines and add to assembly
 	my ($markername, $markerpos, $junk)= split /\s+/, $mapline, 3;
+	print STDERR " reading marker $markername at $markerpos\n";
 	if ($assembly->addMapPos($gmap, $markername, $markerpos)){
 	    if ($markerpos > $maxchrpos){$maxchrpos=$markerpos;}
 	    if ($markerpos < $minchrpos){$minchrpos=$markerpos;}
@@ -588,7 +610,7 @@ while ($currentbin < $molbins){
 
 sub plotmol {
     my ($m, $plotbin)=@_;
-  #  print STDERR "plotting ",$m->{name}," at $plotbin\n";
+    print STDERR "plotting ",$m->{name}," at $plotbin\n";
  #need to add text here.
     my $moltext=$page->text;
     my $linkob=$page->gfx;
@@ -701,7 +723,7 @@ foreach my $m (sort {$a->{avemappos} <=> $b->{avemappos}?$a->{avemappos} <=> $b-
 }
 
 foreach my $l (@markers){
-#    print STDERR "plotting marker $l->{name}\n";
+    print STDERR "plotting marker $l->{name}\n";
     my $linkob=$page->gfx;
     my $linktxt=$page->text;
     $linkob->strokecolor($links{$l->{type}}{colour});
@@ -1312,7 +1334,7 @@ sub plotmarker {
     
     $linktxt->translate(($labelx+$lineanglespace+2)/mm, (($labelpos)/mm) -(($markerfontsize/2)/pt));
     my $labeltext=$l->{name};
-    if ($mc >1) {
+    if ($mc >1 && $nolcount==0) {
 	$labeltext .= " ($mc)";
     }
     $linktxt->text($labeltext);

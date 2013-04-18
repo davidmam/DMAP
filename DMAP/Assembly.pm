@@ -202,7 +202,7 @@ sub addGFFMarker {
 	$self->_sortmol();
     }
     unless (exists($self->{molecules}{$molname})) {
-		warn "Marker position not found in pseudomolecule\n";
+		warn "Marker position not found in pseudomolecule. Molecule '$molname' not known\n";
 		return;
     }
 
@@ -658,7 +658,7 @@ sub _chrfit {
 	   # fit parameter ($b in this case)
 	   $dy[1] .= $x**2;
 
-	   # Add $dy[ ] .= () lines as necessary to supply 
+	   # dd $dy[ ] .= () lines as necessary to supply 
 	   # partial derivatives for all floating paramters.
 	   $dy[2] .= $x;
 	   $dy[3] .= 1;
